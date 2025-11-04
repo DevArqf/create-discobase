@@ -236,7 +236,7 @@ function logger(type, message) {
         // ✅ NOW login to Discord
         logger('INFO', 'Connecting to Discord...');
         await client.login(config.bot.token);
-        logger('SUCCESS', 'Bot logged in successfully!');
+        logger('SUCCESS', `Bot "${client.user.username}" logged in successfully!`);
         
         // Load slash commands AFTER login
         logger('INFO', 'Loading slash commands...');

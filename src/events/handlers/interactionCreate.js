@@ -50,19 +50,19 @@ module.exports = {
                 return await interaction.reply({
                     content: '⏳ Bot is still starting up. Please try again in a moment!',
                     flags: MessageFlags.Ephemeral
-                }).catch(() => {});
+                }).catch(() => { });
             }
-            
+
             const command = client.commands.get(interaction.commandName);
 
             if (!command) {
                 console.log(chalk.yellow(`Command "${interaction.commandName}" not found.`));
                 return;
             }
-            
-            if (!interaction.deferred && !interaction.replied) {
-                await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-            }
+
+            // if (!interaction.deferred && !interaction.replied) {
+            //     await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+            // }
 
             if (command.adminOnly) {
                 if (!config.bot.admins.includes(interaction.user.id)) {
@@ -143,7 +143,12 @@ module.exports = {
                 });
             }
 
-            const cooldowns = client.cooldowns || new Map();
+            // Initialize cooldown map if it doesn't exist
+            if (!client.cooldowns) {
+                client.cooldowns = new Map();
+            }
+
+            const cooldowns = client.cooldowns;
             const now = Date.now();
             const cooldownAmount = (command.cooldown || 3) * 1000;
             const timestamps = cooldowns.get(command.name) || new Map();
@@ -152,20 +157,25 @@ module.exports = {
                 const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
 
                 if (now < expirationTime) {
-                    const timeLeft = (expirationTime - now) / 1000;
+                    const timeLeft = ((expirationTime - now) / 1000).toFixed(1);
 
                     const embed = new EmbedBuilder()
                         .setColor('Blue')
-                        .setDescription(`\`❌\` | Please wait **${timeLeft.toFixed(1)}** more second(s) before reusing the command.`)
+                        .setDescription(`\`❌\` | Please wait **${timeLeft}** more second(s) before reusing the command.`);
 
-                    return await interaction.editReply({
-                        embeds: [embed]
-                    });
+                    // Use reply if not replied yet
+                    if (!interaction.replied && !interaction.deferred) {
+                        return await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+                    } else {
+                        return await interaction.editReply({ embeds: [embed] });
+                    }
                 }
             }
 
+
             timestamps.set(interaction.user.id, now);
             cooldowns.set(command.name, timestamps);
+
 
             try {
                 await command.execute(interaction, client);

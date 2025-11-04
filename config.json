@@ -21,6 +21,6 @@
     "errorLogs": "YOUR_ERROR_WEBHOOK_URL_HERE"
   },
   "prefix": {
-    "value": "YOUR_PREFIX"
+    "value": "YOUR_PREFIX_HERE"
   }
 }
