@@ -73,7 +73,26 @@ const getFileTree = (basePath) => {
 };
 
 /**
- * Pause/Resume commands - FIXED to add disabled at the correct level
+ * Find matching command file in another directory
+ */
+const findMatchingCommand = (fileName, searchDir) => {
+    if (!fs.existsSync(searchDir)) {
+        return null;
+    }
+    
+    const allFiles = getAllFiles(searchDir);
+    const baseName = path.basename(fileName, '.js');
+    
+    // Find file with same name
+    const matchingFile = allFiles.find(file => {
+        return path.basename(file, '.js') === baseName;
+    });
+    
+    return matchingFile || null;
+};
+
+/**
+ * Pause/Resume commands - Works for both slash and prefix commands
  */
 const toggleCommandState = async (filePath, disable) => {
     try {
@@ -83,7 +102,7 @@ const toggleCommandState = async (filePath, disable) => {
         if (disable) {
             // Check if disabled property already exists
             if (/^\s*disabled:\s*(true|false)/m.test(content)) {
-                // Replace existing disabled value (looking for it at module level, not commented)
+                // Replace existing disabled value
                 content = content.replace(/^(\s*)disabled:\s*(false|true)/m, '$1disabled: true');
                 log(`Updated existing disabled property to true`, 'info');
             } else {
@@ -95,7 +114,7 @@ const toggleCommandState = async (filePath, disable) => {
                 if (/data:\s*new\s+SlashCommandBuilder/.test(content)) {
                     content = content.replace(
                         /(module\.exports\s*=\s*\{)(\s*)(\/\/.*\n\s*)?(data:)/,
-                        '$1$2$3disabled: true,\n$2$4'
+                        '$1$2disabled: true,\n$2$4'
                     );
                     log(`Added disabled property for slash command`, 'info');
                 } 
@@ -103,7 +122,7 @@ const toggleCommandState = async (filePath, disable) => {
                 else if (/^\s*name:\s*['"`]/m.test(content)) {
                     content = content.replace(
                         /(module\.exports\s*=\s*\{)(\s*)(\/\/.*\n\s*)?(name:)/,
-                        '$1$2$3disabled: true,\n$2$4'
+                        '$1$2disabled: true,\n$2$4'
                     );
                     log(`Added disabled property for prefix command`, 'info');
                 }
@@ -147,6 +166,58 @@ const toggleCommandState = async (filePath, disable) => {
         console.error(error);
         return false;
     }
+};
+
+/**
+ * Toggle both slash and prefix versions of a command
+ */
+const toggleBothCommandVersions = async (filePath, disable) => {
+    const fileName = path.basename(filePath, '.js');
+    const commandsDir = path.join(__dirname, 'src', 'commands');
+    const messagesDir = path.join(__dirname, 'src', 'messages');
+    
+    let success = true;
+    let filesUpdated = 0;
+    
+    // Determine if this is a slash command or prefix command
+    const isSlashCommand = filePath.includes(path.sep + 'commands' + path.sep);
+    const isPrefixCommand = filePath.includes(path.sep + 'messages' + path.sep);
+    
+    // Toggle the current file
+    const currentSuccess = await toggleCommandState(filePath, disable);
+    if (currentSuccess) filesUpdated++;
+    success = success && currentSuccess;
+    
+    // Find and toggle the matching command in the other directory
+    if (isSlashCommand) {
+        // This is a slash command, look for matching prefix command
+        const matchingPrefixCmd = findMatchingCommand(fileName, messagesDir);
+        if (matchingPrefixCmd) {
+            log(`Found matching prefix command: ${path.basename(matchingPrefixCmd)}`, 'info');
+            const prefixSuccess = await toggleCommandState(matchingPrefixCmd, disable);
+            if (prefixSuccess) filesUpdated++;
+            success = success && prefixSuccess;
+        } else {
+            log(`No matching prefix command found for ${fileName}`, 'warning');
+        }
+    } else if (isPrefixCommand) {
+        // This is a prefix command, look for matching slash command
+        const matchingSlashCmd = findMatchingCommand(fileName, commandsDir);
+        if (matchingSlashCmd) {
+            log(`Found matching slash command: ${path.basename(matchingSlashCmd)}`, 'info');
+            const slashSuccess = await toggleCommandState(matchingSlashCmd, disable);
+            if (slashSuccess) filesUpdated++;
+            success = success && slashSuccess;
+        } else {
+            log(`No matching slash command found for ${fileName}`, 'warning');
+        }
+    }
+    
+    if (filesUpdated > 0) {
+        log(`Updated ${filesUpdated} file(s)`, 'success');
+    }
+    
+    return success;
 };
 
 /**
@@ -200,7 +271,8 @@ const mainMenu = async () => {
     const action = await select({
         message: 'What would you like to do?',
         options: [
-            { value: 'manage-commands', label: '⚙️  Manage Commands' },
+            { value: 'manage-slash-commands', label: '⚙️  Manage Slash Commands' },
+            { value: 'manage-prefix-commands', label: '💬 Manage Prefix Commands' },
             { value: 'manage-events', label: '📅 Manage Events' },
             { value: 'create-new', label: '➕ Create New (Command/Event)' },
             { value: 'exit', label: '🚪 Exit' }
@@ -217,8 +289,10 @@ const mainMenu = async () => {
         return;
     }
     
-    if (action === 'manage-commands') {
-        await manageFiles(path.join(__dirname, 'src', 'commands'), 'Commands');
+    if (action === 'manage-slash-commands') {
+        await manageFiles(path.join(__dirname, 'src', 'commands'), 'Slash Commands');
+    } else if (action === 'manage-prefix-commands') {
+        await manageFiles(path.join(__dirname, 'src', 'messages'), 'Prefix Commands');
     } else if (action === 'manage-events') {
         await manageFiles(path.join(__dirname, 'src', 'events'), 'Events');
     }
@@ -268,15 +342,25 @@ const manageFiles = async (basePath, type) => {
         return manageFiles(basePath, type);
     }
     
+    const isCommand = type.toLowerCase().includes('command');
+    
+    const options = [
+        { value: 'edit', label: '✏️  Edit' },
+        { value: 'delete', label: '🗑️  Delete' },
+        { value: 'back', label: '⬅️  Back' }
+    ];
+    
+    // Only show pause/resume for commands
+    if (isCommand) {
+        options.splice(1, 0, 
+            { value: 'pause', label: '⏸️  Pause/Disable (Both Slash & Prefix)' },
+            { value: 'resume', label: '▶️  Resume/Enable (Both Slash & Prefix)' }
+        );
+    }
+    
     const action = await select({
         message: `What would you like to do with ${chalk.cyan(path.basename(file))}?`,
-        options: [
-            { value: 'edit', label: '✏️  Edit' },
-            { value: 'pause', label: '⏸️  Pause/Disable' },
-            { value: 'resume', label: '▶️  Resume/Enable' },
-            { value: 'delete', label: '🗑️  Delete' },
-            { value: 'back', label: '⬅️  Back' }
-        ]
+        options: options
     });
     
     switch (action) {
@@ -290,19 +374,19 @@ const manageFiles = async (basePath, type) => {
             }
             break;
         case 'pause':
-            const pauseSuccess = await toggleCommandState(file, true);
+            const pauseSuccess = await toggleBothCommandVersions(file, true);
             if (pauseSuccess) {
-                log('⏳ Waiting for file watcher to reload command...', 'info');
+                log('⏳ Waiting for file watcher to reload commands...', 'info');
                 await new Promise(resolve => setTimeout(resolve, 2000));
-                log('✅ Command should now be disabled. Try using it to verify!', 'success');
+                log('✅ Commands should now be disabled. Try using them to verify!', 'success');
             }
             break;
         case 'resume':
-            const resumeSuccess = await toggleCommandState(file, false);
+            const resumeSuccess = await toggleBothCommandVersions(file, false);
             if (resumeSuccess) {
-                log('⏳ Waiting for file watcher to reload command...', 'info');
+                log('⏳ Waiting for file watcher to reload commands...', 'info');
                 await new Promise(resolve => setTimeout(resolve, 2000));
-                log('✅ Command should now be enabled. Try using it to verify!', 'success');
+                log('✅ Commands should now be enabled. Try using them to verify!', 'success');
             }
             break;
         case 'delete':
