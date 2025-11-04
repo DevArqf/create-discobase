@@ -39,15 +39,25 @@ function logErrorToFile(error) {
     }
 }
 
-
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
         const prefix = config.prefix.value;
-        const content = message.content.toLowerCase();
+        const content = message.content;
+        
+        // Early returns
         if (prefix === '') return;
         if (!content.startsWith(prefix) || message.author.bot) return;
 
+        // ✅ FIX: Ensure prefix collection exists before trying to access it
+        if (!client.prefix) {
+            console.error(chalk.red(`Prefix commands collection not initialized. Please ensure prefixHandler is called before the bot starts.`));
+            return await message.reply({
+                content: 'Prefix commands are still loading. Please try again in a moment.'
+            }).catch(console.error);
+        }
+
+        // ✅ FIX: Don't convert to lowercase for args, only for command name
         const args = content.slice(prefix.length).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();
 
@@ -151,7 +161,6 @@ module.exports = {
             });
         }
 
-
         if (command.ownerOnly && message.author.id !== config.bot.ownerId) {
             const embed = new EmbedBuilder()
                 .setColor('Blue')
@@ -219,8 +228,7 @@ module.exports = {
             message.reply({
                 content: 'There was an error while executing this command!',
             });
-            logErrorToFile(error)
-
+            logErrorToFile(error);
         }
     }
 };
