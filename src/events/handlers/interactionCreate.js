@@ -133,8 +133,8 @@ module.exports = {
                 }
             }
 
-
-            if (command.disabled) {
+            if (command.disabled === true) {
+                console.log(chalk.yellow(`[DEBUG] Slash command "${command.data.name}" is disabled`));
                 const embed = new EmbedBuilder()
                     .setColor('Orange')
                     .setDescription(`\`⛔\` | This command is currently disabled. Please try again later.`);
