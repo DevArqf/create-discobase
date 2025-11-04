@@ -134,7 +134,7 @@ module.exports = {
     async execute(client) {
         logWithStyle('SUCCESS', 'Bot is ready and connected to Discord!');
 
-        if (!config.database.mongodbUrl || config.database.mongodbUrl === 'YOUR_MONGODB_URL') {
+        if (!config.database.mongodbUrl || config.database.mongodbUrl === 'YOUR_MONGODB_URL_HERE') {
             logWithStyle('INFO', 'MongoDB URL is not provided or is set to the default placeholder. Skipping MongoDB connection.');
         } else {
             try {
