@@ -1,5 +1,5 @@
 // ──────────────[ Discord.js Client & Intents ]──────────────
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection } = require('discord.js');
 
 // ✅ Create a new Discord client with clear, explicit intents
 const client = new Client({
@@ -13,16 +13,21 @@ const client = new Client({
     partials: [Partials.Channel]           // ✅ Needed for partial DM channels
 });
 
+// ✅ Initialize collections BEFORE any handlers
+client.commands = new Collection();
+client.prefix = new Collection();
+
 // ──────────────[ Core Modules & Config ]──────────────
 const chalk = require('chalk');
 const config = require('../config.json');
 const figlet = require('figlet');
 const fs = require('fs');
 const path = require('path');
-// const gradient = require('gradient-string').default;
 
 // ──────────────[ Function Handlers ]──────────────
 const { eventsHandler } = require('./functions/handlers/handelEvents');
+const { handleCommands } = require('./functions/handlers/handleCommands');
+const { prefixHandler } = require('./functions/handlers/prefixHandler');
 const { checkMissingIntents } = require('./functions/handlers/requiredIntents');
 const { antiCrash } = require('./functions/handlers/antiCrash');
 const { initActivityTracker } = require('./functions/handlers/activityTracker');
@@ -36,7 +41,6 @@ const eventsPath = './events';
 
 // ──────────────[ Safety Nets ]──────────────
 antiCrash();
-
 
 // ──────────────[ Error Handling ]──────────────
 const errorsDir = path.join(__dirname, '../../../errors');
@@ -181,27 +185,12 @@ function logger(type, message) {
     console.log(`${timeBox}${typeBox}${chalk.white(' │ ')}${messageText}`);
 }
 
-
-
 // ──────────────[ Main Bot Code ]──────────────
 (async () => {
     gradient = await loadGradient();
     await printAsciiArt();
+    
     try {
-        await client.login(config.bot.token);
-        logger('SUCCESS', 'Bot logged in successfully!');
-        
-        if (fs.existsSync(adminFolderPath) && fs.existsSync(dashboardFilePath)) {
-            require(dashboardFilePath);
-            logger('SUCCESS', 'Admin dashboard loaded successfully!');
-        }
-
-        // Initialize activity tracker to watch the entire project
-       initActivityTracker(path.join(__dirname, '..'));
-
-
-        logger('SUCCESS', 'Activity tracker initialized for all project folders');
-        
         // Create fancy section headers
         function createHeader(title, icon, color) {
             const width = 80;
@@ -222,10 +211,46 @@ function logger(type, message) {
         
         createHeader('LOADING COMPONENTS', '⚙️', chalk.magenta);
         
+        // ✅ CRITICAL: Load prefix commands BEFORE events and login
+        logger('INFO', 'Loading prefix commands...');
+        prefixHandler(client, path.join(process.cwd(), 'src/messages'));
+        logger('SUCCESS', `Prefix commands loaded successfully! (${client.prefix.size} commands)`);
+        
+        // ✅ Debug: List loaded prefix commands
+        if (client.prefix.size > 0) {
+            const commandNames = Array.from(client.prefix.keys()).join(', ');
+            logger('INFO', `Available prefix commands: ${commandNames}`);
+        }
+        
+        // Load function handlers
         require('./functions/handlers/functionHandler');
 
+        // Load event handlers (this includes messageCreate for prefix commands)
+        logger('INFO', 'Loading event handlers...');
         await eventsHandler(client, path.join(__dirname, eventsPath));
+        logger('SUCCESS', 'Event handlers loaded successfully!');
+        
+        // Check for missing intents
         checkMissingIntents(client);
+        
+        // ✅ NOW login to Discord
+        logger('INFO', 'Connecting to Discord...');
+        await client.login(config.bot.token);
+        logger('SUCCESS', 'Bot logged in successfully!');
+        
+        // Load slash commands AFTER login
+        logger('INFO', 'Loading slash commands...');
+        await handleCommands(client, path.join(process.cwd(), 'src/commands'));
+        logger('SUCCESS', `Slash commands loaded successfully! (${client.commands.size} commands)`);
+        
+        if (fs.existsSync(adminFolderPath) && fs.existsSync(dashboardFilePath)) {
+            require(dashboardFilePath);
+            logger('SUCCESS', 'Admin dashboard loaded successfully!');
+        }
+
+        // Initialize activity tracker to watch the entire project
+        initActivityTracker(path.join(__dirname, '..'));
+        logger('SUCCESS', 'Activity tracker initialized for all project folders');
         
         createHeader('BOT READY', '🚀', chalk.green);
     } catch (error) {
@@ -233,7 +258,8 @@ function logger(type, message) {
             logger('ERROR', 'The token provided for the Discord bot is invalid. Please check your configuration.');
             logErrorToFile(error);
         } else {
-            logger('ERROR', `Failed to log in: ${error.message}`);
+            logger('ERROR', `Failed to start bot: ${error.message}`);
+            console.error(error);
             logErrorToFile(error);
         }
     }

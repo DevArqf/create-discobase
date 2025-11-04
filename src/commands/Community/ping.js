@@ -4,6 +4,7 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 
 module.exports = {
+    disabled: false,
     //! The 'data' property defines the slash command's structure using SlashCommandBuilder.
     data: new SlashCommandBuilder()
         //* Name of the slash command. In this case, the command will be '/ping'.
@@ -38,15 +39,13 @@ module.exports = {
 
     //! The 'execute' function is where the main logic for the command is placed.
     async execute(interaction, client) {
-        await interaction.deferReply({ ephemeral: true });
         try {
-           
             const ping = Date.now() - interaction.createdTimestamp;
             const latency = Math.abs(ping);
             const latencyFormatted = `${latency.toString().substring(0, 2)}ms`;
             const emoji = "⏱️";
 
-            await interaction.editReply({ content: `${emoji} Pong! Latency is ${latencyFormatted}!`, flags: MessageFlags.Ephemeral});
+            await interaction.editReply({ content: `${emoji} Pong! Latency is ${latencyFormatted}!` });
 
         } catch (error) {
             console.error('An error occurred while executing the command:', error);

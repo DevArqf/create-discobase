@@ -81,7 +81,10 @@ function log(message, type = 'INFO') {
 }
 
 function prefixHandler(client, prefixPath) {
-    client.prefix = new Collection();
+    // Don't re-initialize if it already exists
+    if (!client.prefix) {
+        client.prefix = new Collection();
+    }
 
     const loadCommand = (filePath) => {
         try {

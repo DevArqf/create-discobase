@@ -59,6 +59,7 @@ Below is a sneak peek at the new **Discobase Dashboard**:
 - 🎮 **Presence Manager**: Easily control your bot's status, activity, and type through `discobase.json`.
 - 📊 **Discobase Dashboard**: Live stats, activities, & easy settings.
 - ⚡ **Generate Command**: `npm run generate` instantly scaffolds new commands/events!
+- 💻 **Manage Command**: `npm run manage` Enable or disable slash or prefix commands/events!
 
 ---
 
@@ -178,6 +179,33 @@ Create commands & events instantly:
 ```bash
 npm run generate
 ```
+
+### 🛠️ New: Discord.js Builder Support
+
+When generating commands, you can now select which Discord.js builders to include:
+- **EmbedBuilder** - Create rich embedded messages
+- **ButtonBuilder & ActionRowBuilder** - Add interactive buttons
+- **StringSelectMenuBuilder** - Create dropdown menus
+- **ModalBuilder & TextInputBuilder** - Show input forms
+
+The CLI will automatically generate the appropriate imports and example code!
+
+---
+
+## 📊 Manage Commands & Events
+
+Use the new management CLI to edit, pause, or delete commands and events:
+
+```bash
+npm run manage
+```
+
+**Features:**
+- 📋 Browse commands and events in a tree view
+- ✏️ Edit files directly in your preferred editor
+- ⏸️ Pause/Resume commands without deleting them
+- 🗑️ Delete commands and events with confirmation
+- 📁 Organized by categories for easy navigation
 
 ---
 
