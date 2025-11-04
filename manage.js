@@ -73,31 +73,78 @@ const getFileTree = (basePath) => {
 };
 
 /**
- * Pause/Resume commands
+ * Pause/Resume commands - FIXED to add disabled at the correct level
  */
 const toggleCommandState = async (filePath, disable) => {
     try {
         let content = fs.readFileSync(filePath, 'utf8');
+        const originalContent = content;
         
         if (disable) {
-            if (!content.includes('disabled:')) {
-                content = content.replace(
-                    /(module\.exports\s*=\s*{)/,
-                    `$1\n    disabled: true,`
-                );
+            // Check if disabled property already exists
+            if (/^\s*disabled:\s*(true|false)/m.test(content)) {
+                // Replace existing disabled value (looking for it at module level, not commented)
+                content = content.replace(/^(\s*)disabled:\s*(false|true)/m, '$1disabled: true');
+                log(`Updated existing disabled property to true`, 'info');
             } else {
-                content = content.replace(/disabled:\s*false/g, 'disabled: true');
+                // Need to add the disabled property at module.exports level
+                // For slash commands: add after "module.exports = {" but before "data:"
+                // For prefix commands: add after "module.exports = {" but before "name:"
+                
+                // Try to find "data:" for slash commands
+                if (/data:\s*new\s+SlashCommandBuilder/.test(content)) {
+                    content = content.replace(
+                        /(module\.exports\s*=\s*\{)(\s*)(\/\/.*\n\s*)?(data:)/,
+                        '$1$2$3disabled: true,\n$2$4'
+                    );
+                    log(`Added disabled property for slash command`, 'info');
+                } 
+                // Try to find "name:" for prefix commands
+                else if (/^\s*name:\s*['"`]/m.test(content)) {
+                    content = content.replace(
+                        /(module\.exports\s*=\s*\{)(\s*)(\/\/.*\n\s*)?(name:)/,
+                        '$1$2$3disabled: true,\n$2$4'
+                    );
+                    log(`Added disabled property for prefix command`, 'info');
+                }
+                else {
+                    log(`Could not determine command type in file`, 'error');
+                    return false;
+                }
             }
+            
+            // Verify the change was made
+            if (content === originalContent) {
+                log(`Warning: No changes were made to the file`, 'warning');
+                return false;
+            }
+            
             log(`Command paused: ${path.basename(filePath)}`, 'success');
         } else {
-            content = content.replace(/disabled:\s*true/g, 'disabled: false');
+            // Resume command - set to false
+            if (/^\s*disabled:\s*true/m.test(content)) {
+                content = content.replace(/^(\s*)disabled:\s*true/m, '$1disabled: false');
+                log(`Set disabled to false`, 'info');
+            } else if (/^\s*disabled:\s*false/m.test(content)) {
+                log(`Command was already enabled`, 'warning');
+                return true;
+            } else {
+                log(`Command does not have disabled property`, 'warning');
+                return true;
+            }
+            
             log(`Command resumed: ${path.basename(filePath)}`, 'success');
         }
         
+        // Write the file
         fs.writeFileSync(filePath, content, 'utf8');
+        
+        log(`File updated successfully`, 'success');
+        
         return true;
     } catch (error) {
         log(`Error toggling command state: ${error.message}`, 'error');
+        console.error(error);
         return false;
     }
 };
@@ -243,10 +290,20 @@ const manageFiles = async (basePath, type) => {
             }
             break;
         case 'pause':
-            await toggleCommandState(file, true);
+            const pauseSuccess = await toggleCommandState(file, true);
+            if (pauseSuccess) {
+                log('⏳ Waiting for file watcher to reload command...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                log('✅ Command should now be disabled. Try using it to verify!', 'success');
+            }
             break;
         case 'resume':
-            await toggleCommandState(file, false);
+            const resumeSuccess = await toggleCommandState(file, false);
+            if (resumeSuccess) {
+                log('⏳ Waiting for file watcher to reload command...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                log('✅ Command should now be enabled. Try using it to verify!', 'success');
+            }
             break;
         case 'delete':
             await deleteFile(file);
