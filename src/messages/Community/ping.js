@@ -1,6 +1,7 @@
 //! This is a basic structure for a prefix command in a discoBase using discord.js
 
 module.exports = {
+    disabled: false,
     //* Required: Command name, used to trigger the command. Example: !ping
     name: "ping",
 
