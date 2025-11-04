@@ -4,6 +4,7 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 
 module.exports = {
+    disabled: false,
     //! The 'data' property defines the slash command's structure using SlashCommandBuilder.
     data: new SlashCommandBuilder()
         //* Name of the slash command. In this case, the command will be '/ping'.
