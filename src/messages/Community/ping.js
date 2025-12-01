@@ -1,5 +1,7 @@
 //! This is a basic structure for a prefix command in a discoBase using discord.js
 
+const { execute } = require("../../commands/Community/ping");
+
 module.exports = {
     disabled: false,
     //* Required: Command name, used to trigger the command. Example: !ping
@@ -37,7 +39,7 @@ module.exports = {
     //? requiredRoles: ['1400100100176478330', '987654321098765432'],
 
     // The run function is the main logic that gets executed when the command is called.
-    run: async (client, message, args) => {
+    async execute (message, client, args) {
         const ping = Date.now() - message.createdTimestamp;
 
         const latency = Math.abs(ping);

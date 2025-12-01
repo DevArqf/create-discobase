@@ -200,7 +200,7 @@ module.exports = {
         }
 
         try {
-            await command.run(client, message, args);
+            await command.execute(message, client, args);
             const logEmbed = new EmbedBuilder()
                 .setColor('Blue')
                 .setTitle('Command Executed')

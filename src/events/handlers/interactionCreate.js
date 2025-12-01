@@ -71,7 +71,7 @@ module.exports = {
                         .setColor('Blue')
                         .setDescription(`\`❌\` | This command is admin-only. You cannot run this command.`)
 
-                    return await interaction.editReply({
+                    return await interaction.reply({
                         embeds: [embed]
                     });
                 }
@@ -83,7 +83,7 @@ module.exports = {
                         .setColor('Blue')
                         .setDescription(`\`❌\` | This command is owner-only. You cannot run this command.`)
 
-                    return await interaction.editReply({
+                    return await interaction.reply({
                         embeds: [embed]
                     });
                 }
@@ -98,7 +98,7 @@ module.exports = {
                         .setColor('Blue')
                         .setDescription(`\`❌\` | You lack the necessary permissions to execute this command: \`\`\`${missingPermissions.join(", ")}\`\`\``)
 
-                    return await interaction.editReply({
+                    return await interaction.reply({
                         embeds: [embed]
                     });
                 }
@@ -113,7 +113,7 @@ module.exports = {
                         .setColor('Blue')
                         .setDescription(`\`❌\` | You don't have the required role(s) to use this command.`);
 
-                    return await interaction.editReply({
+                    return await interaction.reply({
                         embeds: [embed]
                     });
                 }
@@ -127,7 +127,7 @@ module.exports = {
                         .setColor('Blue')
                         .setDescription(`\`❌\` | I lack the necessary permissions to execute this command: \`\`\`${missingBotPermissions.join(", ")}\`\`\``)
 
-                    return await interaction.editReply({
+                    return await interaction.reply({
                         embeds: [embed]
                     });
                 }
@@ -138,7 +138,7 @@ module.exports = {
                     .setColor('Orange')
                     .setDescription(`\`⛔\` | This command is currently disabled. Please try again later.`);
 
-                return await interaction.editReply({
+                return await interaction.reply({
                     embeds: [embed]
                 });
             }
@@ -167,7 +167,7 @@ module.exports = {
                     if (!interaction.replied && !interaction.deferred) {
                         return await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
                     } else {
-                        return await interaction.editReply({ embeds: [embed] });
+                        return await interaction.reply({ embeds: [embed] });
                     }
                 }
             }
