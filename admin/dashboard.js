@@ -67,60 +67,95 @@ app.get('/api/bot-info', async (req, res) => {
     }
 })
 
-const MONGOOSE_STATES = {
-    0: 'Disconnected',
-    1: 'Active',
-    2: 'Connecting',
-    3: 'Disconnecting'
-}
-
-const WEBSOCKET_STATES = {
-    0: 'Stable',
-    1: 'Connecting',
-    2: 'Reconnecting',
-    3: 'Idle',
-    4: 'Nearly Ready',
-    5: 'Disconnected',
-    6: 'Loading',
-    7: 'Identifying',
-    8: 'Resuming'
-}
-    
-
 app.get('/api/bot-data2', async (req, res) => {
     try {
         // API Response Time (measure actual API processing time)
-
-        const config = loadConfig();
-
-        let mongoose, databaseConnection = 'Unknown';
-
+        
+        // Database Connection Status
+        let databaseConnection = 'Unknown';
+        
         try {
-            mongoose = require('mongoose');
-            databaseConnection = MONGOOSE_STATES[mongoose.connection.readyState];
-        } catch (error) { /* do nothing */ }
-
-        try {
-            if (!mongoose) { // only run if mongoose doesn't exist
-                if (!config.database?.mongodbUrl) {
-                    databaseConnection = 'Not Configured';
-                } else {
-
-                    mongoose = require('mongodb');
-                    const client = new MongoClient(config.database.mongodbUrl, {
-                        serverSelectionTimeoutMS: 5000
-                    });
-
-                    await client.connect();
-                    await client.db().admin().ping();
-                    databaseConnection = 'Active';
-                    await client.close();
+            // Check if MongoDB is configured
+            const config = loadConfig();
+            if (config.database && config.database.mongodbUrl) {
+                try {
+                    const mongoose = require('mongoose');
+                    
+                    // Check mongoose connection state
+                    switch (mongoose.connection.readyState) {
+                        case 0: // DISCONNECTED
+                            databaseConnection = 'Disconnected';
+                            break;
+                        case 1: // CONNECTED
+                            databaseConnection = 'Active';
+                            break;
+                        case 2: // CONNECTING
+                            databaseConnection = 'Connecting';
+                            break;
+                        case 3: // DISCONNECTING
+                            databaseConnection = 'Disconnecting';
+                            break;
+                        default:
+                            databaseConnection = 'Offline';
+                    }
+                } catch (mongooseError) {
+                    // If mongoose is not installed or not imported
+                    try {
+                        const { MongoClient } = require('mongodb');
+                        const client = new MongoClient(config.database.mongodbUrl, {
+                            serverSelectionTimeoutMS: 5000
+                        });
+                        
+                        await client.connect();
+                        await client.db().admin().ping();
+                        databaseConnection = 'Active';
+                        await client.close();
+                    } catch (directMongoError) {
+                        databaseConnection = 'Connection Failed';
+                    }
                 }
+            } else {
+                databaseConnection = 'Not Configured';
             }
-        } catch (error) { /* do nothing */ }
+        } catch (error) {
+            databaseConnection = 'Error';
+        }
         
         // WebSocket Connection Status
-        let websocketConnection = WEBSOCKET_STATES[client.ws?.status] ?? 'Unknown';
+        let websocketConnection = 'Unknown';
+        if (client.ws) {
+            switch (client.ws.status) {
+                case 0: // READY
+                    websocketConnection = 'Stable';
+                    break;
+                case 1: // CONNECTING
+                    websocketConnection = 'Connecting';
+                    break;
+                case 2: // RECONNECTING
+                    websocketConnection = 'Reconnecting';
+                    break;
+                case 3: // IDLE
+                    websocketConnection = 'Idle';
+                    break;
+                case 4: // NEARLY
+                    websocketConnection = 'Nearly Ready';
+                    break;
+                case 5: // DISCONNECTED
+                    websocketConnection = 'Disconnected';
+                    break;
+                case 6: // WAITING_FOR_GUILDS
+                    websocketConnection = 'Loading';
+                    break;
+                case 7: // IDENTIFYING
+                    websocketConnection = 'Identifying';
+                    break;
+                case 8: // RESUMING
+                    websocketConnection = 'Resuming';
+                    break;
+                default:
+                    websocketConnection = 'Offline';
+            }
+        }
         
         // Memory Usage
         const memoryUsage = process.memoryUsage();
@@ -156,7 +191,7 @@ app.get('/api/bot-data2', async (req, res) => {
                 },
                 websocket: {
                     status: websocketConnection,
-                    connected: client.ws?.status === 0
+                    connected: client.ws ? client.ws.status === 0 : false
                 }
             },
             
@@ -382,11 +417,87 @@ app.get('/api/activities', (req, res) => {
 
 app.get('/api/config', (req, res) => {
     const configPath = path.join(__dirname, '../config.json');
+    const discobasePath = path.join(__dirname, '../discobase.json');
+    let config = {};
+    let discobaseConfig = {};
+    
     if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        res.json(config);
-    } else {
-        res.json({});
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    }
+    
+    if (fs.existsSync(discobasePath)) {
+        discobaseConfig = JSON.parse(fs.readFileSync(discobasePath, 'utf-8'));
+    }
+    
+    // Merge configs, with commandStats from discobase.json
+    res.json({
+        ...config,
+        commandStats: discobaseConfig.commandStats || { enabled: false }
+    });
+});
+
+app.get('/api/command-stats/:commandName', async (req, res) => {
+    try {
+        const { commandName } = req.params;
+        const commandType = req.query.type || 'slash'; // Default to slash commands
+        
+        // Check if stats are enabled
+        const discobasePath = path.join(__dirname, '../discobase.json');
+        if (!fs.existsSync(discobasePath)) {
+            return res.status(404).json({ error: 'Configuration not found' });
+        }
+        
+        const discobaseConfig = JSON.parse(fs.readFileSync(discobasePath, 'utf-8'));
+        if (!discobaseConfig.commandStats || discobaseConfig.commandStats.enabled === false) {
+            return res.status(403).json({ error: 'Command stats are disabled' });
+        }
+        
+        // Check if MongoDB is connected
+        const mongoose = require('mongoose');
+        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+            return res.status(503).json({ error: 'Database not connected' });
+        }
+        
+        // Get CommandStats model
+        let CommandStats;
+        try {
+            CommandStats = mongoose.model('CommandStats');
+        } catch (e) {
+            // Model doesn't exist, return empty stats
+            return res.json({
+                commandName,
+                totalUses: 0,
+                servers: [],
+                users: [],
+                lastUsed: null
+            });
+        }
+        
+        // Fetch stats with commandType
+        const stats = await CommandStats.findOne({ commandName, commandType });
+        
+        if (!stats) {
+            return res.json({
+                commandName,
+                totalUses: 0,
+                servers: [],
+                users: [],
+                lastUsed: null
+            });
+        }
+        
+        // Return top 5 servers and users
+        const response = {
+            commandName: stats.commandName,
+            totalUses: stats.totalUses,
+            servers: stats.servers.slice(0, 5),
+            users: stats.users.slice(0, 5),
+            lastUsed: stats.lastUsed
+        };
+        res.json(response);
+    } catch (err) {
+        console.error('Error fetching command stats:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 

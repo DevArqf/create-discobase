@@ -1,8 +1,9 @@
-const { Interaction, Permissions, EmbedBuilder, CommandInteraction, ButtonInteraction, InteractionType, MessageFlags } = require("discord.js");
+const { Interaction, Permissions, EmbedBuilder, CommandInteraction, ButtonInteraction, InteractionType, MessageFlags, ContainerBuilder, TextDisplayBuilder, SectionBuilder } = require("discord.js");
 const chalk = require("chalk");
 const config = require('../../../config.json');
 const path = require('path');
 const fs = require('fs');
+const mongoose = require('mongoose');
 
 const errorsDir = path.join(__dirname, '../../../errors');
 
@@ -38,6 +39,108 @@ function logErrorToFile(error) {
         // We don't want errors in error logging to cause more issues
     }
 }
+
+
+
+async function trackCommandStats(interaction, command, client) {
+    try {
+        // Check if command stats tracking is enabled
+        const discobasePath = path.join(process.cwd(), 'discobase.json');
+        if (!fs.existsSync(discobasePath)) return;
+
+        const discobaseConfig = JSON.parse(fs.readFileSync(discobasePath, 'utf8'));
+        if (!discobaseConfig.commandStats || discobaseConfig.commandStats.enabled === false) {
+            return; // Stats tracking is disabled
+        }
+
+        if (!mongoose.connect) return
+
+        // Get or create CommandStats model
+        let CommandStats;
+
+        try {
+            CommandStats = mongoose.model('CommandStats');
+        } catch (e) {
+            // Model doesn't exist, create it
+            const commandStatsSchema = new mongoose.Schema({
+                commandName: { type: String, required: true, index: true },
+                commandType: { type: String, required: true, enum: ['slash', 'prefix'], index: true },
+                totalUses: { type: Number, default: 0 },
+                servers: [{
+                    serverId: String,
+                    serverName: String,
+                    uses: { type: Number, default: 0 }
+                }],
+                users: [{
+                    userId: String,
+                    username: String,
+                    uses: { type: Number, default: 0 }
+                }],
+                lastUsed: { type: Date, default: Date.now }
+            });
+            // Create compound index for efficient queries
+            commandStatsSchema.index({ commandName: 1, commandType: 1 }, { unique: true });
+            CommandStats = mongoose.model('CommandStats', commandStatsSchema);
+        }
+
+        const commandName = command.data.name;
+        const commandType = 'slash';
+        const userId = interaction.user.id;
+        const username = interaction.user.tag;
+        const serverId = interaction.guild?.id || 'DM';
+        const serverName = interaction.guild?.name || 'Direct Message';
+
+        // Find or create command stats document for SLASH commands
+        let stats = await CommandStats.findOne({ commandName, commandType });
+
+        if (!stats) {
+            stats = new CommandStats({
+                commandName,
+                commandType,
+                totalUses: 0,
+                servers: [],
+                users: []
+            });
+        }
+
+        // Update total uses
+        stats.totalUses += 1;
+        stats.lastUsed = new Date();
+
+        // Update server stats if tracking is enabled
+        if (discobaseConfig.commandStats.trackServers !== false && serverId !== 'DM') {
+            const serverIndex = stats.servers.findIndex(s => s.serverId === serverId);
+            if (serverIndex >= 0) {
+                stats.servers[serverIndex].uses += 1;
+                stats.servers[serverIndex].serverName = serverName; // Update name in case it changed
+            } else {
+                stats.servers.push({ serverId, serverName, uses: 1 });
+            }
+            // Sort servers by uses (descending)
+            stats.servers.sort((a, b) => b.uses - a.uses);
+        }
+
+        // Update user stats if tracking is enabled
+        if (discobaseConfig.commandStats.trackUsers !== false) {
+            const userIndex = stats.users.findIndex(u => u.userId === userId);
+            if (userIndex >= 0) {
+                stats.users[userIndex].uses += 1;
+                stats.users[userIndex].username = username; // Update username in case it changed
+            } else {
+                stats.users.push({ userId, username, uses: 1 });
+            }
+            // Sort users by uses (descending)
+            stats.users.sort((a, b) => b.uses - a.uses);
+        }
+
+        await stats.save();
+    } catch (err) {
+        // Silently fail - we don't want stats tracking to break commands
+        console.error(chalk.yellow('Failed to track command stats:'), err.message);
+    }
+}
+
+
 
 module.exports = {
     name: 'interactionCreate',
@@ -179,29 +282,42 @@ module.exports = {
 
             try {
                 await command.execute(interaction, client);
-                // Command logging code...
-                const logEmbed = new EmbedBuilder()
-                    .setColor('#0099ff')
-                    .setTitle('Command Executed')
-                    .addFields(
-                        { name: 'User', value: `${interaction.user.tag}(${interaction.user.id})`, inline: true },
-                        { name: 'Command', value: `/${command.data.name}`, inline: true },
-                        {
-                            name: 'Server',
-                            value: interaction.guild
-                                ? `${interaction.guild.name} (${interaction.guild.id})`
-                                : 'Direct Message',
-                            inline: true
-                        },
-                        { name: 'Timestamp', value: new Date().toLocaleString(), inline: true }
-                    )
-                    .setTimestamp();
+
+
+                // Track command statistics if enabled
+                await trackCommandStats(interaction, command, client);
+
+                const logContainer = new ContainerBuilder()
+                    .setAccentColor(0xFFFFFF)
+
+                const text = new TextDisplayBuilder().setContent(
+                    `## Command Executed
+**User** : ${interaction.user.tag} (${interaction.user.id})
+**Command** : \`/${command.data.name}\`
+**Server** : ${interaction.guild
+                        ? `${interaction.guild.name} (${interaction.guild.id})`
+                        : 'Direct Message'
+                    }
+**Timestamp** : <t:${Math.floor(Date.now() / 1000)}:F>`
+                );
+
+
+                const section = new SectionBuilder()
+                    .addTextDisplayComponents(text)
+                    .setThumbnailAccessory(thumbnail =>
+                        thumbnail.setURL(
+                            interaction.guild?.iconURL({ size: 256 }) ??
+                            'https://cdn.discordapp.com/embed/avatars/0.png'
+                        )
+                    );
+
+                logContainer.addSectionComponents(section)
 
                 if (config.logging.commandLogsChannelId) {
                     if (config.logging.commandLogsChannelId === 'COMMAND_LOGS_CHANNEL_ID') return;
                     const logsChannel = client.channels.cache.get(config.logging.commandLogsChannelId);
                     if (logsChannel) {
-                        await logsChannel.send({ embeds: [logEmbed] });
+                        await logsChannel.send({ components: [logContainer], flags: MessageFlags.IsComponentsV2 });
                     } else {
                         console.error(chalk.yellow(`Logs channel with ID ${config.logging.commandLogsChannelId} not found.`));
                     }
@@ -215,30 +331,6 @@ module.exports = {
             }
 
         }
-        // else if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.type == InteractionType.ModalSubmit || interaction.isContextMenuCommand()) {
-        //     // Handle all components using the components collection
-        //     const component = client.components.get(interaction.customId);
 
-        //     if (!component) {
-        //         console.log(chalk.yellow(`Component with customId "${interaction.customId}" not found.`));
-        //         if (!interaction.replied && !interaction.deferred) {
-        //             await interaction.reply({ 
-        //                 content: 'This interaction is no longer available.', 
-        //                 ephemeral: true 
-        //             }).catch(console.error);
-        //         }
-        //         return;
-        //     }
-
-        //     try {
-        //         await component.execute(interaction, client);
-        //     } catch (error) {
-        //         console.error(chalk.red(`Error executing component "${interaction.customId}": `), error);
-        //         logErrorToFile(error);
-        //         if (!interaction.replied && !interaction.deferred) {
-        //             interaction.reply({ content: 'Something went wrong while executing this interaction.', ephemeral: true }).catch(err => console.error('Failed to send error response:', err));
-        //         }
-        //     }
-        // }
     }
 }

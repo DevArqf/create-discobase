@@ -1,6 +1,6 @@
 {
   "name": "create-discobase",
-  "version": "2.6.2",
+  "version": "3.0.0",
   "description": "Easily create and manage your Discord bot with our powerful toolkit! 🚀",
   "main": "src/index.js",
   "bin": {
@@ -22,7 +22,7 @@
     "cli-progress": "^3.12.0",
     "cors": "^2.8.5",
     "discord.js": "^14.21.0",
-    "express": "^5.1.0",
+    "express": "^5.2.1",
     "figlet": "^1.8.2",
     "fs-extra": "^10.1.0",
     "gradient-string": "^3.0.0",
@@ -38,6 +38,8 @@
     "commands",
     "command handler",
     "event handler",
+    "handler",
+    "discobase",
     "toolkit",
     "discord.js"
   ],

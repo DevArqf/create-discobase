@@ -145,4 +145,4 @@ commandWatcher.on('error', (error) => logWithStyle(`Command watcher error: ${err
 eventWatcher.on('error', (error) => logWithStyle(`Event watcher error: ${error}`, 'error'));
 prefixWatcher.on('error', (error) => logWithStyle(`Prefix watcher error: ${error}`, 'error'));
 
-logWithStyle('[Info] Watching for new files.', 'info');
+logWithStyle('Watching for new files.', 'info');

@@ -1,9 +1,10 @@
 const chalk = require("chalk");
 const config = require('../../../config.json');
-const { EmbedBuilder, MessageFlags } = require('discord.js');
+const { EmbedBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SectionBuilder } = require('discord.js');
 const { getSimilarCommands } = require('../../functions/handlers/similarity');
 const path = require('path');
 const fs = require('fs');
+const mongoose = require('mongoose');
 
 const errorsDir = path.join(__dirname, '../../../errors');
 
@@ -39,12 +40,99 @@ function logErrorToFile(error) {
     }
 }
 
+async function trackPrefixCommandStats(message, command, client) {
+    try {
+        const discobasePath = path.join(__dirname, '../../../discobase.json');
+        if (!fs.existsSync(discobasePath)) return;
+
+        const discobaseConfig = JSON.parse(fs.readFileSync(discobasePath, 'utf8'));
+        if (!discobaseConfig.commandStats || discobaseConfig.commandStats.enabled === false) {
+            return;
+        }
+
+        if (!mongoose.connect) return;
+        let CommandStats;
+
+        try {
+            CommandStats = mongoose.model('CommandStats');
+        } catch (e) {
+            const commandStatsSchema = new mongoose.Schema({
+                commandName: { type: String, required: true, index: true },
+                commandType: { type: String, required: true, enum: ['slash', 'prefix'], index: true },
+                totalUses: { type: Number, default: 0 },
+                servers: [{
+                    serverId: String,
+                    serverName: String,
+                    uses: { type: Number, default: 0 }
+                }],
+                users: [{
+                    userId: String,
+                    username: String,
+                    uses: { type: Number, default: 0 }
+                }],
+                lastUsed: { type: Date, default: Date.now }
+            });
+            commandStatsSchema.index({ commandName: 1, commandType: 1 }, { unique: true });
+            CommandStats = mongoose.model('CommandStats', commandStatsSchema);
+        }
+
+        const commandName = command.name;
+        const commandType = 'prefix';
+        const userId = message.author.id;
+        const username = message.author.tag;
+        const serverId = message.guild?.id || 'DM';
+        const serverName = message.guild?.name || 'Direct Message';
+
+        let stats = await CommandStats.findOne({ commandName, commandType });
+
+        if (!stats) {
+            stats = new CommandStats({
+                commandName,
+                commandType,
+                totalUses: 0,
+                servers: [],
+                users: []
+            });
+        }
+
+        stats.totalUses += 1;
+        stats.lastUsed = new Date();
+
+        if (discobaseConfig.commandStats.trackServers !== false && serverId !== 'DM') {
+            const serverIndex = stats.servers.findIndex(s => s.serverId === serverId);
+            if (serverIndex >= 0) {
+                stats.servers[serverIndex].uses += 1;
+                stats.servers[serverIndex].serverName = serverName;
+            } else {
+                stats.servers.push({ serverId, serverName, uses: 1 });
+            }
+            stats.servers.sort((a, b) => b.uses - a.uses);
+        }
+
+        if (discobaseConfig.commandStats.trackUsers !== false) {
+            const userIndex = stats.users.findIndex(u => u.userId === userId);
+            if (userIndex >= 0) {
+                stats.users[userIndex].uses += 1;
+                stats.users[userIndex].username = username;
+            } else {
+                stats.users.push({ userId, username, uses: 1 });
+            }
+            stats.users.sort((a, b) => b.uses - a.uses);
+        }
+
+        await stats.save();
+    } catch (err) {
+        const chalk = require('chalk');
+        console.error(chalk.yellow('Failed to track prefix command stats:'), err.message);
+    }
+}
+
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
         const prefix = config.prefix.value;
         const content = message.content;
-        
+
         // Early returns
         if (prefix === '') return;
         if (!content.startsWith(prefix) || message.author.bot) return;
@@ -201,21 +289,40 @@ module.exports = {
 
         try {
             await command.execute(message, client, args);
-            const logEmbed = new EmbedBuilder()
-                .setColor('Blue')
-                .setTitle('Command Executed')
-                .addFields(
-                    { name: 'User', value: `${message.author.tag} (${message.author.id})`, inline: true },
-                    { name: 'Command', value: `${config.prefix.value}${command.name}`, inline: true },
-                    { name: 'Server', value: `${message.guild.name} (${message.guild.id})`, inline: true },
-                    { name: 'Timestamp', value: new Date().toLocaleString(), inline: true }
-                )
-                .setTimestamp();
+
+            // Track prefix command statistics if enabled
+            await trackPrefixCommandStats(message, command, client);
+
+            const logContainer = new ContainerBuilder()
+                .setAccentColor(0xFFFFFF)
+
+            const text = new TextDisplayBuilder().setContent(
+                `## Command Executed
+**User** : ${message.author.tag} (${message.author.id})
+**Command** : \`${message.content.split(' ')[0]}\`
+**Server** : ${message.guild
+                    ? `${message.guild.name} (${message.guild.id})`
+                    : 'Direct Message'
+                }
+**Timestamp** : <t:${Math.floor(Date.now() / 1000)}:F>`
+            );
+
+
+            const section = new SectionBuilder()
+                .addTextDisplayComponents(text)
+                .setThumbnailAccessory(thumbnail =>
+                    thumbnail.setURL(
+                        message.guild?.iconURL({ size: 256 }) ??
+                        message.author.displayAvatarURL({ size: 256 })
+                    )
+                );
+
+            logContainer.addSectionComponents(section)
 
             if (config.logging.commandLogsChannelId) {
                 const logsChannel = client.channels.cache.get(config.logging.commandLogsChannelId);
                 if (logsChannel) {
-                    await logsChannel.send({ embeds: [logEmbed] });
+                    await logsChannel.send({ components: [logContainer], flags: MessageFlags.IsComponentsV2 });
                 } else {
                     if (config.logging.commandLogsChannelId === 'COMMAND_LOGS_CHANNEL_ID') return;
 

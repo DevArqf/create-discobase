@@ -18,6 +18,12 @@
     "//_customState_note": "!=! This is only for the CUSTOM activity type !=!",
     "customState": "🚀 discobase!"
   },
+  "commandStats": {
+    "enabled": true,
+    "trackUsage": true,
+    "trackServers": true,
+    "trackUsers": true
+  },
   "activityTracker": {
     "enabled": true,
     "ignoredPaths": [
