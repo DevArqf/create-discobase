@@ -50,7 +50,12 @@ async function trackPrefixCommandStats(message, command, client) {
             return;
         }
 
-        if (!mongoose.connect) return;
+        // Check if MongoDB is connected
+        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+            // MongoDB is not connected, silently return
+            return;
+        }
+
         let CommandStats;
 
         try {

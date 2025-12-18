@@ -195,7 +195,7 @@ async function createProject() {
 
         // Install dependencies if requested
         if (installRequired) {
-            const packages = ['discobase-core', 'discord.js', 'nodemon', 'multer', 'figlet', 'micromatch', 'cli-progress', 'chalk@4', 'fs-extra', 'gradient-string', 'chokidar', 'axios', 'set-interval-async', 'boxen', '@clack/prompts'];
+            const packages = ['discobase-core@latest', 'discord.js', 'nodemon', 'multer', 'figlet', 'micromatch', 'cli-progress', 'chalk@4', 'fs-extra', 'gradient-string', 'chokidar', 'axios', 'set-interval-async', 'boxen', '@clack/prompts'];
             if (installMongoDB) {
                 packages.push('mongoose');
             }
@@ -506,10 +506,7 @@ client.once('clientReady', () => {
         keywords: ["discord", "bot"],
         author: "",
         license: "ISC",
-        dependencies: {
-            "discobase-core": "^3.0.0",
-            "discord.js": "^14.21.0"
-        },
+      
         devDependencies: {
             "nodemon": "^3.1.7"
         }
@@ -559,7 +556,7 @@ Visit [https://www.discobase.site](https://www.discobase.site) for full document
 
     // Install dependencies
     if (installRequired) {
-        const packages = ['discobase-core', 'discord.js', 'nodemon', 'multer', 'figlet', 'micromatch', 'cli-progress', 'chalk@4', 'fs-extra', 'gradient-string', 'chokidar', 'axios', 'set-interval-async', 'boxen', '@clack/prompts'];
+        const packages = ['discobase-core@latest', 'discord.js', 'nodemon', 'multer', 'figlet', 'micromatch', 'cli-progress', 'chalk@4', 'fs-extra', 'gradient-string', 'chokidar', 'axios', 'set-interval-async', 'boxen', '@clack/prompts'];
         if (installMongoDB) {
             packages.push('mongoose');
         }

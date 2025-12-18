@@ -53,7 +53,11 @@ async function trackCommandStats(interaction, command, client) {
             return; // Stats tracking is disabled
         }
 
-        if (!mongoose.connect) return
+        // Check if MongoDB is connected
+        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+            // MongoDB is not connected, silently return
+            return;
+        }
 
         // Get or create CommandStats model
         let CommandStats;
